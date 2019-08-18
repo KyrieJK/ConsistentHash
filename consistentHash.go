@@ -94,6 +94,46 @@ func (c *ConsistentHash) AddNode(ip string) {
 	c.count++
 }
 
+func (c *ConsistentHash) AddNodes(ip []string) {
+	c.Lock()
+	defer c.Unlock()
+
+	for _, nodeIp := range ip {
+		for i := 0; i < c.numberOfVNodes; i++ {
+			c.ring[c.generateHash(c.generateKey(nodeIp, i))] = nodeIp
+		}
+		c.members[nodeIp] = true
+	}
+
+	c.updateSortedConsistentHash()
+}
+
+func (c *ConsistentHash) RemoveNode(ip string) {
+	c.Lock()
+	defer c.Unlock()
+
+	for i := 0; i < c.numberOfVNodes; i++ {
+		delete(c.ring, c.generateHash(c.generateKey(ip, i)))
+	}
+	delete(c.members, ip)
+	c.updateSortedConsistentHash()
+}
+
+func (c *ConsistentHash) GetNode(name string) (nodeName string, err error) {
+	c.RLock()
+	defer c.RUnlock()
+
+	if len(c.ring) == 0 {
+		return "", errors.New("ring nil")
+	}
+
+	hashKey := c.generateHash(name)
+	index := c.search(hashKey)
+	nodeName = c.ring[c.sortedHashes[index]]
+	err = nil
+	return nodeName, err
+}
+
 func (c *ConsistentHash) updateSortedConsistentHash() {
 	hashes := uint32Type{}
 	for k := range c.ring {
@@ -101,4 +141,15 @@ func (c *ConsistentHash) updateSortedConsistentHash() {
 	}
 	sort.Sort(hashes)
 	c.sortedHashes = hashes
+}
+
+func (c *ConsistentHash) search(key uint32) (i int) {
+	fn := func(x int) bool {
+		return c.sortedHashes[x] > key
+	}
+	index := sort.Search(len(c.sortedHashes), fn)
+	if index >= len(c.sortedHashes) {
+		index = 0
+	}
+	return index
 }
