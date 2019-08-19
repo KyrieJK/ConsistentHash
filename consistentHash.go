@@ -106,6 +106,7 @@ func (c *ConsistentHash) AddNodes(ip []string) {
 	}
 
 	c.updateSortedConsistentHash()
+	c.count += int32(len(ip))
 }
 
 func (c *ConsistentHash) RemoveNode(ip string) {
@@ -117,6 +118,7 @@ func (c *ConsistentHash) RemoveNode(ip string) {
 	}
 	delete(c.members, ip)
 	c.updateSortedConsistentHash()
+	c.count--
 }
 
 func (c *ConsistentHash) GetNode(name string) (nodeName string, err error) {
@@ -132,6 +134,84 @@ func (c *ConsistentHash) GetNode(name string) (nodeName string, err error) {
 	nodeName = c.ring[c.sortedHashes[index]]
 	err = nil
 	return nodeName, err
+}
+
+/**
+Get two closest distinct realNode to the input param “name” in ring hash
+*/
+func (c *ConsistentHash) GetTwo(name string) (string, string, error) {
+	c.RLock()
+	defer c.RUnlock()
+
+	if len(c.ring) == 0 {
+		return "", "", errors.New("empty ring")
+	}
+
+	key := c.generateHash(name)
+	index := c.search(key)
+	realNodeIp := c.ring[c.sortedHashes[index]]
+	if c.count == 1 {
+		return realNodeIp, "", nil
+	}
+
+	startIndex := index
+	var nextNodeIp string
+	for index = startIndex + 1; index != startIndex; index++ {
+		if index >= len(c.sortedHashes) {
+			index = 0
+		}
+		nextNodeIp = c.ring[c.sortedHashes[index]]
+		if nextNodeIp != realNodeIp {
+			break
+		}
+	}
+	return realNodeIp, nextNodeIp, nil
+}
+
+func (c *ConsistentHash) GetN(name string, n int) (nodes []string, err error) {
+	c.RLock()
+	defer c.RUnlock()
+
+	if len(c.ring) == 0 {
+		return nil, errors.New("empty ring")
+	}
+
+	if c.count < int32(n) {
+		n = int(c.count)
+	}
+
+	key := c.generateHash(name)
+	index := c.search(key)
+	node := c.ring[c.sortedHashes[index]]
+	nodes = append(nodes, node)
+	if len(nodes) == n {
+		return nodes, nil
+	}
+
+	startIndex := index
+	for index = startIndex + 1; index != startIndex; index++ {
+		if index >= len(c.sortedHashes) {
+			index = 0
+		}
+		node = c.ring[c.sortedHashes[index]]
+		if !sliceHasMember(nodes, node) {
+			nodes = append(nodes, node)
+		}
+		if len(nodes) == n {
+			break
+		}
+	}
+
+	return nodes, nil
+}
+
+func sliceHasMember(slice []string, mem string) bool {
+	for _, m := range slice {
+		if m == mem {
+			return true
+		}
+	}
+	return false
 }
 
 func (c *ConsistentHash) updateSortedConsistentHash() {
