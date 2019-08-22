@@ -9,6 +9,7 @@ import (
 )
 
 var GConsistentHash *ConsistentHash
+var DefaultNumberofVNodes = 20
 
 type uint32Type []uint32
 
@@ -34,7 +35,7 @@ type ConsistentHash struct {
 	ring           map[uint32]string
 	members        map[string]bool
 	numberOfVNodes int
-	sortedHashes   []uint32
+	sortedHashes   uint32Type
 	count          int32
 	sync.RWMutex
 }
@@ -43,7 +44,7 @@ func NewConsistentHash() *ConsistentHash {
 	GConsistentHash = &ConsistentHash{
 		ring:           make(map[uint32]string),
 		members:        make(map[string]bool),
-		numberOfVNodes: 20,
+		numberOfVNodes: DefaultNumberofVNodes,
 		sortedHashes:   nil,
 		count:          0,
 		RWMutex:        sync.RWMutex{},
